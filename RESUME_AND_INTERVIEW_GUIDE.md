@@ -1,8 +1,8 @@
 # Resume & Interview Guide — Argus (AI SRE Copilot)
 
 **Links to use everywhere (resume, LinkedIn, cover letters):**
-- Live demo (click and try, no install): `https://ramyaharika-code.github.io/sre-copilot/`
-- Source code: `https://github.com/ramyaharika-code/sre-copilot`
+- Live demo (click and try, no install): `https://ramyah48.github.io/sre-copilot/`
+- Source code: `https://github.com/ramyah48/sre-copilot`
 
 Put both on the resume line — recruiters click the live demo, engineers click the repo.
 

@@ -1,6 +1,6 @@
 # Argus — AI SRE Incident Triage & RCA Copilot (MCP Plugin)
 
-**Live demo (no install, works in any browser):** https://ramyaharika-code.github.io/sre-copilot/
+**Live demo (no install, works in any browser):** https://ramyah48.github.io/sre-copilot/
 *(goes live once GitHub Pages is enabled on this repo — see "Publishing the live demo" below)*
 
 Argus is an AI SRE copilot, shipped as an **MCP (Model Context Protocol) plugin**, that watches for firing alerts, automatically correlates logs/metrics/deploys/dependency status into a single incident context, proposes a root-cause hypothesis with evidence, recommends a concrete runbook fix, and — only for pre-approved low-risk actions — executes it. Everything else is escalated to a human with the diagnosis already done.
@@ -60,7 +60,7 @@ This mirrors the "AI SRE" category that PagerDuty, Datadog (Bits AI), and incide
 
 `docs/index.html` is a **self-contained, dependency-free reimplementation of the correlation + heuristic RCA + remediation risk-gate + backtest logic in vanilla JavaScript**, using the same 15 labeled incidents. It runs entirely in the visitor's browser — no server, no API key, no Python. Cross-checked against the Python backtest output (`node` harness) and the two agree to within floating-point rounding.
 
-To make it live at `https://ramyaharika-code.github.io/sre-copilot/`:
+To make it live at `https://ramyah48.github.io/sre-copilot/`:
 
 1. Push this repo to GitHub as `sre-copilot` (exact name matters for the URL above — see "Push to GitHub" below).
 2. On GitHub: **Settings → Pages → Build and deployment → Source: "Deploy from a branch"** → Branch: `main`, Folder: `/docs` → **Save**.
@@ -76,7 +76,7 @@ git init
 git add .
 git commit -m "Initial commit: Argus AI SRE copilot"
 git branch -M main
-git remote add origin https://github.com/ramyaharika-code/sre-copilot.git
+git remote add origin https://github.com/ramyah48/sre-copilot.git
 git push -u origin main
 ```
 
