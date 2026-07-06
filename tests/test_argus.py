@@ -44,7 +44,9 @@ def test_heuristic_rca_matches_ground_truth(incident_id, monkeypatch):
 
 def test_high_risk_action_requires_approval():
     plan = {"action_id": "failover_to_secondary_az", "risk": "high"}
-    os.environ["ARGUS_AUTO_APPROVE_LOW_RISK"] = "1"  # even with auto-approve on for LOW risk
+    os.environ["ARGUS_AUTO_APPROVE_LOW_RISK"] = (
+        "1"  # even with auto-approve on for LOW risk
+    )
     result = remediation.execute_remediation(plan, approved=False)
     assert result["status"] == "escalated_for_human_approval"
 

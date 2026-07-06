@@ -39,7 +39,11 @@ def print_trace(incident_id: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Argus AI SRE demo runner")
-    parser.add_argument("--trace", metavar="INCIDENT_ID", help="Print a full trace for one incident (e.g. INC-004)")
+    parser.add_argument(
+        "--trace",
+        metavar="INCIDENT_ID",
+        help="Print a full trace for one incident (e.g. INC-004)",
+    )
     args = parser.parse_args()
 
     if args.trace:

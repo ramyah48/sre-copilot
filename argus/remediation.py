@@ -29,7 +29,7 @@ RUNBOOK_CATALOG: dict[str, dict[str, Any]] = {
     "increase_connection_pool": {
         "description": "Temporarily raise the DB connection pool size and kill the offending long-running query.",
         "risk": "medium",
-        "simulated_command": "kubectl set env deployment/{service} DB_POOL_MAX=100 && psql -c \"SELECT pg_terminate_backend(pid) ...\"",
+        "simulated_command": 'kubectl set env deployment/{service} DB_POOL_MAX=100 && psql -c "SELECT pg_terminate_backend(pid) ..."',
     },
     "activate_fallback_provider": {
         "description": "Fail over to the secondary payment/notification provider.",
@@ -102,11 +102,15 @@ def propose_remediation(context: dict[str, Any], rca: dict[str, Any]) -> dict[st
         "description": runbook["description"],
         "risk": runbook["risk"],
         "requires_human_approval": requires_approval,
-        "simulated_command": (runbook["simulated_command"] or "").format(service=context.get("service", "")),
+        "simulated_command": (runbook["simulated_command"] or "").format(
+            service=context.get("service", "")
+        ),
     }
 
 
-def execute_remediation(remediation: dict[str, Any], approved: bool = False) -> dict[str, Any]:
+def execute_remediation(
+    remediation: dict[str, Any], approved: bool = False
+) -> dict[str, Any]:
     """Executes (in simulation) a proposed remediation, subject to the risk gate.
 
     - risk == none/low: auto-executes if ARGUS_AUTO_APPROVE_LOW_RISK=1, else
@@ -123,7 +127,10 @@ def execute_remediation(remediation: dict[str, Any], approved: bool = False) -> 
         }
 
     if remediation["action_id"] == "monitor_only":
-        return {"status": "no_action_taken", "message": "Confirmed non-issue; monitoring only."}
+        return {
+            "status": "no_action_taken",
+            "message": "Confirmed non-issue; monitoring only.",
+        }
 
     return {
         "status": "executed",

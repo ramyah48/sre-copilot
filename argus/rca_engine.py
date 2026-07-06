@@ -59,11 +59,14 @@ def _propose_rca_llm(context: dict[str, Any], api_key: str) -> dict[str, Any]:
         messages=[
             {
                 "role": "user",
-                "content": "Incident context bundle:\n\n" + json.dumps(context, indent=2),
+                "content": "Incident context bundle:\n\n"
+                + json.dumps(context, indent=2),
             }
         ],
     )
-    raw_text = "".join(block.text for block in message.content if hasattr(block, "text"))
+    raw_text = "".join(
+        block.text for block in message.content if hasattr(block, "text")
+    )
     parsed = _extract_json(raw_text)
     parsed["reasoning_source"] = "llm"
     return parsed
@@ -94,17 +97,31 @@ def _log_text(context):
 
 _rule(
     "bad_deploy",
-    lambda c: c.get("recent_deploy") and c["recent_deploy"].get("minutes_before_alert", 999) <= 15,
-    lambda c: [f"Deploy {c['recent_deploy']['version']} shipped {c['recent_deploy']['minutes_before_alert']}m before the alert"],
+    lambda c: (
+        c.get("recent_deploy")
+        and c["recent_deploy"].get("minutes_before_alert", 999) <= 15
+    ),
+    lambda c: [
+        f"Deploy {c['recent_deploy']['version']} shipped {c['recent_deploy']['minutes_before_alert']}m before the alert"
+    ],
 )
 _rule(
     "downstream_dependency_outage",
-    lambda c: c.get("dependency_status") and "degraded" in str(c["dependency_status"].get("status", "")).lower(),
-    lambda c: [f"Dependency status: {c['dependency_status']['name']} reported degraded"],
+    lambda c: (
+        c.get("dependency_status")
+        and "degraded" in str(c["dependency_status"].get("status", "")).lower()
+    ),
+    lambda c: [
+        f"Dependency status: {c['dependency_status']['name']} reported degraded"
+    ],
 )
 _rule(
     "memory_leak",
-    lambda c: "outofmemory" in _log_text(c) or "oomkilled" in _log_text(c) or "heap space" in _log_text(c),
+    lambda c: (
+        "outofmemory" in _log_text(c)
+        or "oomkilled" in _log_text(c)
+        or "heap space" in _log_text(c)
+    ),
     lambda c: ["Log signature: OutOfMemoryError / OOMKilled"],
 )
 _rule(
@@ -124,22 +141,45 @@ _rule(
 )
 _rule(
     "config_error",
-    lambda c: "feature-flag" in _log_text(c) or "feature flag" in _log_text(c) or "flag '" in _log_text(c),
+    lambda c: (
+        "feature-flag" in _log_text(c)
+        or "feature flag" in _log_text(c)
+        or "flag '" in _log_text(c)
+    ),
     lambda c: ["Log signature: feature flag change correlated with regression"],
 )
 _rule(
     "network_partition",
-    lambda c: "no route to host" in _log_text(c) or "packet loss" in _log_text(c) or "cross-az" in _log_text(c) or "cross az" in c.get("alert", {}).get("alertname", "").lower(),
+    lambda c: (
+        "no route to host" in _log_text(c)
+        or "packet loss" in _log_text(c)
+        or "cross-az" in _log_text(c)
+        or "cross az" in c.get("alert", {}).get("alertname", "").lower()
+    ),
     lambda c: ["Log signature: no route to host / cross-AZ packet loss"],
 )
 _rule(
     "cache_stampede",
-    lambda c: "cache" in _log_text(c) and ("hit rate" in _log_text(c) or "stampede" in _log_text(c) or "thundering" in _log_text(c) or "concurrent regeneration" in _log_text(c)),
-    lambda c: ["Log signature: cache hit-rate collapse with concurrent regeneration requests"],
+    lambda c: (
+        "cache" in _log_text(c)
+        and (
+            "hit rate" in _log_text(c)
+            or "stampede" in _log_text(c)
+            or "thundering" in _log_text(c)
+            or "concurrent regeneration" in _log_text(c)
+        )
+    ),
+    lambda c: [
+        "Log signature: cache hit-rate collapse with concurrent regeneration requests"
+    ],
 )
 _rule(
     "dns_resolution_failure",
-    lambda c: "dns" in _log_text(c) or "no such host" in _log_text(c) or "lookup" in _log_text(c),
+    lambda c: (
+        "dns" in _log_text(c)
+        or "no such host" in _log_text(c)
+        or "lookup" in _log_text(c)
+    ),
     lambda c: ["Log signature: DNS lookup failure / no such host"],
 )
 _rule(
@@ -149,18 +189,32 @@ _rule(
 )
 _rule(
     "secrets_rotation_failure",
-    lambda c: ("401" in _log_text(c) or "unauthorized" in _log_text(c)) and "rotat" in _log_text(c),
-    lambda c: ["Log signature: 401 Unauthorized immediately following a secret rotation event"],
+    lambda c: (
+        ("401" in _log_text(c) or "unauthorized" in _log_text(c))
+        and "rotat" in _log_text(c)
+    ),
+    lambda c: [
+        "Log signature: 401 Unauthorized immediately following a secret rotation event"
+    ],
 )
 _rule(
     "resource_exhaustion",
-    lambda c: c.get("metrics", {}).get("cpu_pct", 0) > 90 or "throttl" in _log_text(c) or "noisy neighbor" in _log_text(c),
+    lambda c: (
+        c.get("metrics", {}).get("cpu_pct", 0) > 90
+        or "throttl" in _log_text(c)
+        or "noisy neighbor" in _log_text(c)
+    ),
     lambda c: ["Metric signature: CPU saturation / cgroup throttling"],
 )
 _rule(
     "traffic_spike",
-    lambda c: c.get("metrics", {}).get("error_rate_pct", 0) < 2 and "autoscaler" in _log_text(c),
-    lambda c: ["Metrics show healthy error rate with autoscaler already responding to load"],
+    lambda c: (
+        c.get("metrics", {}).get("error_rate_pct", 0) < 2
+        and "autoscaler" in _log_text(c)
+    ),
+    lambda c: [
+        "Metrics show healthy error rate with autoscaler already responding to load"
+    ],
 )
 
 
@@ -168,7 +222,9 @@ def _propose_rca_heuristic(context: dict[str, Any]) -> dict[str, Any]:
     for category, matcher, evidence_fn in _RULES:
         try:
             if matcher(context):
-                evidence = evidence_fn(context) + context.get("correlation_notes", [])[:2]
+                evidence = (
+                    evidence_fn(context) + context.get("correlation_notes", [])[:2]
+                )
                 return {
                     "category": category,
                     "root_cause": _ROOT_CAUSE_TEMPLATES.get(
@@ -176,7 +232,9 @@ def _propose_rca_heuristic(context: dict[str, Any]) -> dict[str, Any]:
                     ).format(service=context.get("service", "the service")),
                     "confidence": 0.72,
                     "evidence": evidence,
-                    "severity_assessment": context.get("alert", {}).get("severity", "medium"),
+                    "severity_assessment": context.get("alert", {}).get(
+                        "severity", "medium"
+                    ),
                     "reasoning_source": "heuristic",
                 }
         except Exception:  # noqa: BLE001 - a single bad rule shouldn't crash triage

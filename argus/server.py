@@ -23,7 +23,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import correlation, data_store, notifier, rca_engine, remediation, triage_agent
+from . import correlation, data_store, rca_engine, remediation, triage_agent
 
 mcp = FastMCP("argus-sre")
 
@@ -70,11 +70,15 @@ def execute_fix(incident_id: str, approved: bool = False) -> dict[str, Any]:
 
 
 @mcp.tool()
-def triage_incident(incident_id: str, auto_execute: bool = True, notify: bool = True) -> dict[str, Any]:
+def triage_incident(
+    incident_id: str, auto_execute: bool = True, notify: bool = True
+) -> dict[str, Any]:
     """Run the full Argus triage pipeline for one incident end-to-end:
     correlate signals -> propose RCA -> propose remediation -> execute
     (if safe) -> post an incident summary. Returns the full trace."""
-    return triage_agent.run_triage(incident_id, auto_execute=auto_execute, notify=notify)
+    return triage_agent.run_triage(
+        incident_id, auto_execute=auto_execute, notify=notify
+    )
 
 
 @mcp.tool()

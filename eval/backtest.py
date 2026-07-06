@@ -60,7 +60,9 @@ def run_backtest(verbose: bool = True) -> dict:
         correct_rca = rca["category"] == truth["category"]
         correct_action = remediation_plan["action_id"] == truth["correct_action"]
         baseline_mttr = truth["baseline_mttr_minutes"]
-        ai_mttr = _estimate_ai_mttr(correct_rca, correct_action, execution, baseline_mttr)
+        ai_mttr = _estimate_ai_mttr(
+            correct_rca, correct_action, execution, baseline_mttr
+        )
 
         rows.append(
             {
@@ -86,7 +88,9 @@ def run_backtest(verbose: bool = True) -> dict:
     return {"rows": rows, "summary": summary}
 
 
-def _estimate_ai_mttr(correct_rca: bool, correct_action: bool, execution: dict, baseline: float) -> float:
+def _estimate_ai_mttr(
+    correct_rca: bool, correct_action: bool, execution: dict, baseline: float
+) -> float:
     if not correct_rca:
         return round(baseline * 1.10, 1)
     if execution["status"] == "executed":
@@ -133,7 +137,17 @@ def _print_report(rows: list[dict], summary: dict) -> None:
         ]
         for r in rows
     ]
-    headers = ["Incident", "Service", "Predicted Category", "Conf.", "Source", "Action", "Exec Status", "Baseline MTTR", "AI MTTR"]
+    headers = [
+        "Incident",
+        "Service",
+        "Predicted Category",
+        "Conf.",
+        "Source",
+        "Action",
+        "Exec Status",
+        "Baseline MTTR",
+        "AI MTTR",
+    ]
     print(tabulate(table, headers=headers, tablefmt="github"))
     print()
     print("=== Backtest Summary ===")

@@ -56,6 +56,26 @@ This mirrors the "AI SRE" category that PagerDuty, Datadog (Bits AI), and incide
    propose_root_cause, propose_fix, execute_fix, triage_incident, …)
 ```
 
+## Backend API (FastAPI)
+
+`backend/main.py` is a REST API over the same `argus` package used by the MCP server and CLI — nothing about the triage logic changes, this is only an HTTP layer on top of it, so the CLI, the MCP server, and this API can never disagree about what Argus decided.
+
+```bash
+pip install -r backend/requirements.txt
+uvicorn backend.main:app --reload --port 8000
+```
+
+Then open **http://127.0.0.1:8000/docs** — FastAPI auto-generates a full interactive API explorer, so you can try every endpoint from the browser with zero extra work.
+
+Endpoints:
+- `GET /incidents` — list all incidents
+- `GET /incidents/{id}/trace` — full triage trace (context, RCA, remediation, execution status)
+- `POST /incidents/{id}/approve` — a human approves an escalated (medium/high risk) action; body: `{"approved_by": "your name"}`
+- `POST /incidents/{id}/reset` — clear a stored decision, re-triage from scratch
+- `GET /backtest` — same numbers as `python demo.py`, as JSON
+
+Note: decisions are stored in memory and reset when the server restarts — fine for a demo, not for a real deployment (that would need a real database so an approval isn't lost mid-incident).
+
 ## Publishing the live demo (so anyone with the link can try it — no install)
 
 `docs/index.html` is a **self-contained, dependency-free reimplementation of the correlation + heuristic RCA + remediation risk-gate + backtest logic in vanilla JavaScript**, using the same 15 labeled incidents. It runs entirely in the visitor's browser — no server, no API key, no Python. Cross-checked against the Python backtest output (`node` harness) and the two agree to within floating-point rounding.
@@ -86,6 +106,7 @@ Then follow "Publishing the live demo" above to turn on Pages.
 
 ```
 sre-copilot/
+├── backend/              # FastAPI REST API over the argus package (see "Backend API" above)
 ├── argus/
 │   ├── data_store.py     # mocked observability backend (swap for real APIs)
 │   ├── correlation.py    # builds the incident context bundle

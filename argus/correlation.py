@@ -60,9 +60,13 @@ def _correlation_notes(context: dict[str, Any]) -> list[str]:
             "exhaustion and toward a logic/config/dependency bug."
         )
     if metrics.get("cpu_pct", 0) > 80:
-        notes.append("CPU is saturated — resource exhaustion or noisy-neighbor contention is plausible.")
+        notes.append(
+            "CPU is saturated — resource exhaustion or noisy-neighbor contention is plausible."
+        )
 
     if not notes:
-        notes.append("No strong automatic correlation found; relying on log/metric pattern matching.")
+        notes.append(
+            "No strong automatic correlation found; relying on log/metric pattern matching."
+        )
 
     return notes

@@ -9,7 +9,10 @@ from typing import Any
 
 
 def format_incident_summary(
-    context: dict[str, Any], rca: dict[str, Any], remediation: dict[str, Any], execution: dict[str, Any]
+    context: dict[str, Any],
+    rca: dict[str, Any],
+    remediation: dict[str, Any],
+    execution: dict[str, Any],
 ) -> str:
     evidence = "\n".join(f"  • {e}" for e in rca.get("evidence", []))
     lines = [
