@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Argus — AI SRE Incident Triage &amp; RCA Copilot (Live Demo)</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #10161d;
+    --panel-alt: #141b23;
+    --border: #232c36;
+    --text: #d7dde3;
+    --muted: #7f8b98;
+    --accent: #5ee6c5;
+    --accent-dim: #2e6e5f;
+    --amber: #e6b85e;
+    --red: #e66b5e;
+    --green: #6fd17a;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #0e141b 0%, #0b0f14 100%);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    letter-spacing: 0.2px;
+  }
+  header h1 span.eye { color: var(--accent); }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    max-width: 800px;
+    font-size: 14px;
+  }
+  header .badges { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 9px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--muted);
+    background: var(--panel);
+  }
+  main {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 28px 32px 60px;
+  }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .tab {
+    padding: 9px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .tab.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin: 0 0 12px; }
+  .incident-list { display: flex; flex-direction: column; gap: 6px; max-height: 640px; overflow-y: auto; }
+  .incident-item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    background: var(--panel-alt);
+  }
+  .incident-item:hover { border-color: var(--accent-dim); }
+  .incident-item.selected { border-color: var(--accent); background: #10241f; }
+  .incident-item .id { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .incident-item .name { font-size: 13px; margin-top: 2px; }
+  .incident-item .svc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .sev { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 10px; margin-left: 6px; }
+  .sev.critical { background: #3a1414; color: var(--red); }
+  .sev.warning { background: #3a2f14; color: var(--amber); }
+
+  .step { margin-bottom: 18px; }
+  .step h3 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--accent); margin: 0 0 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .step h3 .num {
+    width: 20px; height: 20px; border-radius: 50%; background: var(--accent-dim); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 11px;
+  }
+  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; font-size: 13px; margin-bottom: 8px; }
+  .kv .k { color: var(--muted); }
+  pre.logs {
+    background: #05070a; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; font-family: var(--mono); font-size: 12px; color: #9fb; overflow-x: auto; margin: 0;
+  }
+  .evidence { font-size: 13px; margin: 6px 0 0; padding-left: 18px; }
+  .evidence li { margin-bottom: 4px; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 6px; }
+  .pill.low, .pill.none { background: #123024; color: var(--green); }
+  .pill.medium { background: #3a2f14; color: var(--amber); }
+  .pill.high { background: #3a1414; color: var(--red); }
+  .pill.executed { background: #123024; color: var(--green); }
+  .pill.escalated_for_human_approval { background: #3a2f14; color: var(--amber); }
+  .pill.no_action_taken { background: #1a2230; color: #8fb3e6; }
+  .confidence-bar { height: 6px; background: #1c242d; border-radius: 3px; overflow: hidden; margin-top: 4px; width: 160px; display: inline-block; vertical-align: middle; }
+  .confidence-fill { height: 100%; background: var(--accent); }
+  .slack {
+    background: #f8f8f8; color: #1d1c1d; border-radius: 8px; padding: 14px; font-size: 13px;
+    font-family: -apple-system, sans-serif; white-space: pre-wrap; border-left: 4px solid #611f69;
+  }
+  .caveat {
+    margin-top: 22px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+  button.run {
+    background: var(--accent); color: #062018; border: none; border-radius: 8px;
+    padding: 10px 18px; font-weight: 700; font-size: 13px; cursor: pointer;
+  }
+  button.run:hover { filter: brightness(1.08); }
+  table.backtest { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 16px; }
+  table.backtest th, table.backtest td { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+  table.backtest th { color: var(--muted); text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.4px; }
+  .ok { color: var(--green); }
+  .bad { color: var(--red); }
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+  @media (max-width: 700px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
+  .stat { background: var(--panel-alt); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .stat .num { font-size: 24px; font-weight: 700; color: var(--accent); font-family: var(--mono); }
+  .stat .label { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .hidden { display: none; }
+  code { font-family: var(--mono); background: #05070a; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="eye">◉</span> Argus — AI SRE Incident Triage &amp; RCA Copilot</h1>
+  <p>A live, in-browser reproduction of the open-source project: correlate alert/metric/log/deploy signals, generate a root-cause hypothesis with evidence, propose a runbook fix, and gate execution by risk tier — not by model confidence. No install, no API key, runs entirely client-side.</p>
+  <div class="badges">
+    <span class="badge">MCP plugin</span>
+    <span class="badge">15 synthetic incidents</span>
+    <span class="badge">14 SRE failure categories</span>
+    <span class="badge">risk-gated auto-remediation</span>
+    <span class="badge">Python source: see repo README</span>
+  </div>
+</header>
+
+<main>
+  <div class="tabs">
+    <div class="tab active" data-tab="triage">Live Incident Triage</div>
+    <div class="tab" data-tab="backtest">Backtest Report</div>
+  </div>
+
+  <div id="tab-triage">
+    <div class="grid">
+      <div class="panel">
+        <h2>Currently Firing (simulated)</h2>
+        <div class="incident-list" id="incidentList"></div>
+      </div>
+      <div class="panel" id="traceHost">
+        <h2>Select an incident to run the triage pipeline →</h2>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-backtest" class="hidden">
+    <div class="panel">
+      <h2>Backtest: replay all 15 incidents against ground truth</h2>
+      <p style="font-size:13px;color:var(--muted);margin-top:0">Runs the same heuristic RCA + remediation logic used above across every labeled incident and scores it. See the methodology caveat below the table.</p>
+      <button class="run" id="runBacktest">▶ Run backtest</button>
+      <div id="backtestOutput"></div>
+    </div>
+  </div>
+
+  <div class="caveat">
+    <strong>Methodology note:</strong> the heuristic rule set was authored against this same incident set, so RCA accuracy shown here is training-set accuracy, not a generalization claim — it's a regression baseline. The full project also has an LLM-reasoning mode (Claude) for novel incidents, plus a pytest suite and a real MCP server — see the source repository linked from the project README for the Python implementation, tests, and setup instructions.
+  </div>
+</main>
+
+<script>
+const INCIDENTS = [
+  {
+    "id": "INC-001",
+    "service": "checkout-api",
+    "alert": {
+      "alertname": "HighErrorRate",
+      "severity": "critical",
+      "summary": "5xx error rate on checkout-api exceeded 5% for 5m",
+      "started_at": "2026-07-01T09:14:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 8.7,
+      "latency_p99_ms": 640,
+      "cpu_pct": 41,
+      "pattern_description": "Error rate stepped sharply from 0.2% to 8.7% at a single point in time; latency mildly elevated; CPU/memory nominal."
+    },
+    "logs": [
+      "ERROR checkout-api: NullPointerException in PaymentValidator.validate() at line 214",
+      "ERROR checkout-api: Uncaught exception while processing order 88213",
+      "INFO checkout-api: request_id=9f2c... status=500 duration_ms=210"
+    ],
+    "recent_deploy": {"version": "v2.14.3", "minutes_before_alert": 6},
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "bad_deploy",
+      "root_cause": "Deploy v2.14.3 (6 min before the alert) introduced a NullPointerException in PaymentValidator, causing checkout requests to fail with 500s.",
+      "correct_action": "rollback_deploy",
+      "baseline_mttr_minutes": 35
+    }
+  },
+  {
+    "id": "INC-002",
+    "service": "recommendation-service",
+    "alert": {
+      "alertname": "PodCrashLoopBackOff",
+      "severity": "critical",
+      "summary": "recommendation-service pods restarting every ~4 minutes",
+      "started_at": "2026-07-02T14:02:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 3.1,
+      "latency_p99_ms": 300,
+      "cpu_pct": 55,
+      "pattern_description": "Memory usage climbs linearly from 200MB to the 1.5GB container limit over ~25 minutes, then the pod is OOMKilled and restarts; pattern repeats."
+    },
+    "logs": [
+      "ERROR recommendation-service: OutOfMemoryError: Java heap space",
+      "WARN recommendation-service: GC overhead limit exceeded",
+      "INFO kubelet: Killing container recommendation-service (OOMKilled)"
+    ],
+    "recent_deploy": {"version": "v5.2.0", "minutes_before_alert": 210},
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "memory_leak",
+      "root_cause": "A steady, linear memory growth pattern ending in OOMKill points to a memory leak introduced in v5.2.0 (likely an unbounded in-memory cache added to the recommendation ranking module).",
+      "correct_action": "restart_service",
+      "baseline_mttr_minutes": 50
+    }
+  },
+  {
+    "id": "INC-003",
+    "service": "orders-db-proxy",
+    "alert": {
+      "alertname": "DBConnectionPoolExhausted",
+      "severity": "critical",
+      "summary": "orders-db-proxy connection pool at 100% utilization",
+      "started_at": "2026-07-02T22:40:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 12.4,
+      "latency_p99_ms": 4200,
+      "cpu_pct": 30,
+      "pattern_description": "Active DB connections pinned at max pool size (50/50); queued query count rising; CPU on the DB proxy itself is low."
+    },
+    "logs": [
+      "ERROR orders-db-proxy: connection pool exhausted, timeout waiting for connection",
+      "ERROR orders-db-proxy: HikariPool-1 - Connection is not available, request timed out after 30000ms",
+      "WARN orders-db-proxy: slow query detected (duration=28s) on orders_history table"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "db_connection_pool_exhaustion",
+      "root_cause": "A batch reporting job is running a 28s+ unindexed query against orders_history, holding connections open and starving the pool for normal order traffic.",
+      "correct_action": "increase_connection_pool",
+      "baseline_mttr_minutes": 40
+    }
+  },
+  {
+    "id": "INC-004",
+    "service": "payments-gateway",
+    "alert": {
+      "alertname": "UpstreamDependencyErrors",
+      "severity": "critical",
+      "summary": "payments-gateway seeing 100% failure calling external processor 'GlobalPay'",
+      "started_at": "2026-07-03T03:10:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 41.0,
+      "latency_p99_ms": 9000,
+      "cpu_pct": 18,
+      "pattern_description": "Outbound calls to GlobalPay time out at the 9s client timeout; internal service health (CPU/mem) is completely normal."
+    },
+    "logs": [
+      "ERROR payments-gateway: GlobalPayClient timeout after 9000ms calling https://api.globalpay.example/v1/charge",
+      "ERROR payments-gateway: circuit breaker OPEN for globalpay-client",
+      "INFO payments-gateway: internal health checks: OK"
+    ],
+    "recent_deploy": null,
+    "dependency_status": {"name": "GlobalPay (external payment processor)", "status": "degraded / status page reports incident"},
+    "ground_truth": {
+      "category": "downstream_dependency_outage",
+      "root_cause": "Third-party payment processor GlobalPay is experiencing an outage on their end; payments-gateway itself is healthy but blocked on the dependency.",
+      "correct_action": "activate_fallback_provider",
+      "baseline_mttr_minutes": 60
+    }
+  },
+  {
+    "id": "INC-005",
+    "service": "log-ingest-worker",
+    "alert": {
+      "alertname": "DiskSpaceCritical",
+      "severity": "critical",
+      "summary": "log-ingest-worker root volume at 97% capacity",
+      "started_at": "2026-07-03T11:05:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 5.5,
+      "latency_p99_ms": 800,
+      "cpu_pct": 22,
+      "pattern_description": "Disk usage climbing ~2%/hour over the last two days with no corresponding traffic growth."
+    },
+    "logs": [
+      "ERROR log-ingest-worker: No space left on device (os error 28)",
+      "ERROR log-ingest-worker: failed to write buffered batch to /var/spool/ingest",
+      "WARN log-ingest-worker: /var/log/ingest has grown to 41GB, rotation appears stalled"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "disk_full",
+      "root_cause": "Log rotation stopped working after a config change disabled the logrotate cron job, so old logs are never cleaned up and the disk is filling.",
+      "correct_action": "clear_disk_space",
+      "baseline_mttr_minutes": 30
+    }
+  },
+  {
+    "id": "INC-006",
+    "service": "api-gateway",
+    "alert": {
+      "alertname": "TLSHandshakeFailures",
+      "severity": "critical",
+      "summary": "Spike in TLS handshake failures on api-gateway public endpoint",
+      "started_at": "2026-07-04T00:02:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 63.0,
+      "latency_p99_ms": 50,
+      "cpu_pct": 12,
+      "pattern_description": "Failures begin abruptly at midnight UTC and affect 100% of external clients; internal service-to-service traffic unaffected."
+    },
+    "logs": [
+      "ERROR api-gateway: TLS handshake error: certificate has expired (x509: certificate has expired or is not yet valid)",
+      "ERROR api-gateway: client rejected connection: certificate expired",
+      "INFO api-gateway: cert 'api.example.com' expiry was 2026-07-04T00:00:00Z"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "cert_expiry",
+      "root_cause": "The public TLS certificate for api.example.com expired at midnight; auto-renewal via the ACME client failed silently three days ago.",
+      "correct_action": "rotate_certificate",
+      "baseline_mttr_minutes": 45
+    }
+  },
+  {
+    "id": "INC-007",
+    "service": "search-api",
+    "alert": {
+      "alertname": "ElevatedLatency",
+      "severity": "warning",
+      "summary": "search-api p99 latency up 6x after feature flag rollout",
+      "started_at": "2026-07-04T16:20:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 0.4,
+      "latency_p99_ms": 3100,
+      "cpu_pct": 38,
+      "pattern_description": "Latency jumps immediately after a feature-flag change event; error rate barely moves, so this looks like a performance regression rather than a crash."
+    },
+    "logs": [
+      "INFO feature-flags: flag 'search_use_new_ranker' flipped to 100% rollout",
+      "WARN search-api: ranker model 'v3-experimental' request took 2950ms",
+      "INFO search-api: falling back to cached results after slow ranker response"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "config_error",
+      "root_cause": "The 'search_use_new_ranker' feature flag was rolled out to 100% of traffic; the experimental ranker model is far slower than the legacy one and was not load-tested at full traffic.",
+      "correct_action": "revert_config_flag",
+      "baseline_mttr_minutes": 25
+    }
+  },
+  {
+    "id": "INC-008",
+    "service": "auth-service",
+    "alert": {
+      "alertname": "RequestVolumeSpike",
+      "severity": "warning",
+      "summary": "auth-service request volume 4x above baseline",
+      "started_at": "2026-07-05T09:00:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 0.6,
+      "latency_p99_ms": 210,
+      "cpu_pct": 71,
+      "pattern_description": "Traffic volume climbing steadily over 30 minutes correlated with a marketing campaign launch; error rate and latency remain within normal bounds, autoscaler is adding pods."
+    },
+    "logs": [
+      "INFO auth-service: autoscaler added 4 new replicas (target CPU 70%)",
+      "INFO auth-service: request rate 12,400 req/min (baseline ~3,000 req/min)",
+      "INFO auth-service: no elevated error rate observed"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "traffic_spike",
+      "root_cause": "Legitimate traffic surge from a marketing campaign, not a failure. The autoscaler is already handling load correctly; error rate and latency remain healthy.",
+      "correct_action": "monitor_only",
+      "baseline_mttr_minutes": 20
+    }
+  },
+  {
+    "id": "INC-009",
+    "service": "inventory-service",
+    "alert": {
+      "alertname": "CrossAZConnectivityLoss",
+      "severity": "critical",
+      "summary": "inventory-service in us-east-1b cannot reach primary DB in us-east-1a",
+      "started_at": "2026-07-05T13:44:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 55.0,
+      "latency_p99_ms": 30000,
+      "cpu_pct": 20,
+      "pattern_description": "100% of requests routed through the 1b availability zone fail; 1a and 1c are unaffected, pointing to an AZ-local network issue rather than an application bug."
+    },
+    "logs": [
+      "ERROR inventory-service: connect timeout to db-primary.us-east-1a.internal from az us-east-1b",
+      "ERROR inventory-service: no route to host 10.4.12.9",
+      "WARN network: elevated packet loss reported between us-east-1a and us-east-1b"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "network_partition",
+      "root_cause": "A network partition between availability zones us-east-1a and us-east-1b is blocking cross-AZ traffic; this is an infrastructure-level fault outside the application.",
+      "correct_action": "failover_to_secondary_az",
+      "baseline_mttr_minutes": 70
+    }
+  },
+  {
+    "id": "INC-010",
+    "service": "pricing-service",
+    "alert": {
+      "alertname": "HighErrorRate",
+      "severity": "critical",
+      "summary": "pricing-service 5xx rate above threshold",
+      "started_at": "2026-07-06T08:30:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 15.2,
+      "latency_p99_ms": 900,
+      "cpu_pct": 44,
+      "pattern_description": "Error rate jumps immediately following a deploy event; no gradual ramp, consistent with a bad release rather than resource exhaustion."
+    },
+    "logs": [
+      "ERROR pricing-service: KeyError: 'discount_tier' in PricingEngine.compute()",
+      "ERROR pricing-service: unhandled exception in /v1/price endpoint",
+      "INFO pricing-service: deploy v9.0.1 completed 4 minutes ago"
+    ],
+    "recent_deploy": {"version": "v9.0.1", "minutes_before_alert": 4},
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "bad_deploy",
+      "root_cause": "Deploy v9.0.1 removed a field ('discount_tier') that PricingEngine.compute() still depends on, causing KeyErrors on every pricing request.",
+      "correct_action": "rollback_deploy",
+      "baseline_mttr_minutes": 35
+    }
+  },
+  {
+    "id": "INC-011",
+    "service": "home-feed-service",
+    "alert": {
+      "alertname": "CacheHitRateCollapse",
+      "severity": "warning",
+      "summary": "home-feed-service cache hit rate dropped from 92% to 4%",
+      "started_at": "2026-07-06T18:12:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 2.0,
+      "latency_p99_ms": 2200,
+      "cpu_pct": 88,
+      "pattern_description": "Cache hit rate collapsed at the same moment a popular cache key expired, causing a thundering-herd of requests to hit the backend simultaneously; backend CPU spiking as a result."
+    },
+    "logs": [
+      "WARN home-feed-service: cache key 'feed:trending:global' expired, hit rate dropped to 4%",
+      "WARN home-feed-service: backend origin CPU at 88%, request queueing observed",
+      "INFO home-feed-service: 40,000 concurrent regeneration requests for the same key detected"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "cache_stampede",
+      "root_cause": "A high-traffic cache key ('feed:trending:global') expired without a lock/jitter strategy, causing a thundering-herd cache stampede that overloaded the backend.",
+      "correct_action": "warm_cache",
+      "baseline_mttr_minutes": 30
+    }
+  },
+  {
+    "id": "INC-012",
+    "service": "notification-service",
+    "alert": {
+      "alertname": "OutboundCallFailures",
+      "severity": "critical",
+      "summary": "notification-service cannot resolve email provider hostname",
+      "started_at": "2026-07-07T02:15:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 22.0,
+      "latency_p99_ms": 100,
+      "cpu_pct": 15,
+      "pattern_description": "Failures are near-instant (fail fast) rather than timeouts, consistent with a resolution failure rather than a slow/unavailable endpoint."
+    },
+    "logs": [
+      "ERROR notification-service: dial tcp: lookup smtp.emailprovider.example: no such host",
+      "ERROR notification-service: DNS resolution failed for smtp.emailprovider.example",
+      "WARN notification-service: local DNS cache last refreshed 6h ago"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "dns_resolution_failure",
+      "root_cause": "Stale/poisoned local DNS cache entries are causing lookups for the email provider hostname to fail; the provider itself is reachable.",
+      "correct_action": "flush_dns_cache",
+      "baseline_mttr_minutes": 40
+    }
+  },
+  {
+    "id": "INC-013",
+    "service": "order-processor",
+    "alert": {
+      "alertname": "QueueBacklogGrowing",
+      "severity": "warning",
+      "summary": "order-processor consumer lag on 'orders.created' topic growing unbounded",
+      "started_at": "2026-07-07T05:50:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 1.0,
+      "latency_p99_ms": 500,
+      "cpu_pct": 25,
+      "pattern_description": "Consumer lag rising linearly while consumer CPU stays low, meaning consumers are idle/stalled rather than overloaded."
+    },
+    "logs": [
+      "WARN order-processor: consumer group 'order-processor-group' lag = 184,320 messages and climbing",
+      "WARN order-processor: consumer thread pool utilization at 3%",
+      "INFO order-processor: no errors thrown, consumers appear idle"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "queue_backlog",
+      "root_cause": "Consumer count did not scale with a recent increase in order volume; too few consumer instances are running to keep up with the 'orders.created' topic.",
+      "correct_action": "scale_out_consumers",
+      "baseline_mttr_minutes": 35
+    }
+  },
+  {
+    "id": "INC-014",
+    "service": "billing-service",
+    "alert": {
+      "alertname": "AuthenticationFailures",
+      "severity": "critical",
+      "summary": "billing-service getting 401s from internal ledger API",
+      "started_at": "2026-07-07T07:05:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 100.0,
+      "latency_p99_ms": 120,
+      "cpu_pct": 10,
+      "pattern_description": "100% of calls to the ledger API fail with 401 starting exactly at a scheduled secret-rotation time; no other symptoms."
+    },
+    "logs": [
+      "ERROR billing-service: ledger-api responded 401 Unauthorized",
+      "ERROR billing-service: API key 'billing-svc-key-v3' rejected",
+      "INFO secrets-manager: scheduled rotation of 'billing-svc-key' completed 5 minutes ago"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "secrets_rotation_failure",
+      "root_cause": "A scheduled secret rotation updated 'billing-svc-key' in the secrets manager, but billing-service's cached credential was not refreshed, so it is still presenting the old, now-invalid key.",
+      "correct_action": "rotate_credentials",
+      "baseline_mttr_minutes": 55
+    }
+  },
+  {
+    "id": "INC-015",
+    "service": "recommendation-service",
+    "alert": {
+      "alertname": "HighCPUThrottling",
+      "severity": "warning",
+      "summary": "recommendation-service CPU throttling detected on 3 nodes",
+      "started_at": "2026-07-07T10:30:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 1.8,
+      "latency_p99_ms": 1500,
+      "cpu_pct": 97,
+      "pattern_description": "CPU pinned near 100% with visible cgroup throttling; another workload was co-scheduled on the same nodes moments before the alert (noisy neighbor)."
+    },
+    "logs": [
+      "WARN kubelet: container recommendation-service throttled, cpu.cfs_throttled_time increasing rapidly",
+      "INFO scheduler: batch-ml-training-job co-scheduled onto node-17, node-18, node-19",
+      "WARN recommendation-service: request latency p99 degraded to 1500ms"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "resource_exhaustion",
+      "root_cause": "A batch ML training job was scheduled onto the same nodes as recommendation-service, causing CPU contention ('noisy neighbor') and throttling.",
+      "correct_action": "scale_out",
+      "baseline_mttr_minutes": 35
+    }
+  }
+];
+
+const RUNBOOK_CATALOG = {
+  rollback_deploy: { description: "Roll back the most recent deploy to the previous stable version.", risk: "low", cmd: "argocd app rollback {service} --to previous-stable" },
+  restart_service: { description: "Rolling-restart the affected service's pods.", risk: "low", cmd: "kubectl rollout restart deployment/{service}" },
+  increase_connection_pool: { description: "Temporarily raise the DB connection pool size and kill the offending long-running query.", risk: "medium", cmd: "kubectl set env deployment/{service} DB_POOL_MAX=100 && psql -c \"SELECT pg_terminate_backend(pid) ...\"" },
+  activate_fallback_provider: { description: "Fail over to the secondary payment/notification provider.", risk: "medium", cmd: "featureflag set use_secondary_provider=true --service {service}" },
+  clear_disk_space: { description: "Clear old rotated logs/temp files and re-enable log rotation.", risk: "low", cmd: "ssh {service} 'find /var/log -mtime +2 -delete && systemctl restart logrotate.timer'" },
+  rotate_certificate: { description: "Trigger emergency certificate re-issuance and reload the TLS terminator.", risk: "medium", cmd: "certbot renew --cert-name api.example.com --force && systemctl reload nginx" },
+  revert_config_flag: { description: "Revert the offending feature flag to its previous value.", risk: "low", cmd: "featureflag revert search_use_new_ranker --service {service}" },
+  scale_out: { description: "Add replicas / move workload off contended nodes.", risk: "low", cmd: "kubectl scale deployment/{service} --replicas=+3" },
+  failover_to_secondary_az: { description: "Fail traffic away from the affected availability zone.", risk: "high", cmd: "aws elb modify-target-group --az-exclude us-east-1b" },
+  warm_cache: { description: "Pre-warm the hot cache key and add jitter/locking to prevent re-stampede.", risk: "low", cmd: "cache-cli warm feed:trending:global --with-lock" },
+  flush_dns_cache: { description: "Flush the local DNS resolver cache and re-resolve the dependency hostname.", risk: "low", cmd: "systemd-resolve --flush-caches" },
+  scale_out_consumers: { description: "Add consumer instances to drain the backlog.", risk: "low", cmd: "kubectl scale deployment/{service} --replicas=+5" },
+  rotate_credentials: { description: "Force-refresh the cached credential from the secrets manager.", risk: "medium", cmd: "vault kv get -force-refresh secret/{service}/api-key && kubectl rollout restart deployment/{service}" },
+  monitor_only: { description: "No remediation needed; continue monitoring.", risk: "none", cmd: null },
+};
+
+const CATEGORY_TO_ACTION = {
+  bad_deploy: "rollback_deploy", memory_leak: "restart_service", db_connection_pool_exhaustion: "increase_connection_pool",
+  downstream_dependency_outage: "activate_fallback_provider", disk_full: "clear_disk_space", cert_expiry: "rotate_certificate",
+  config_error: "revert_config_flag", network_partition: "failover_to_secondary_az", cache_stampede: "warm_cache",
+  dns_resolution_failure: "flush_dns_cache", queue_backlog: "scale_out_consumers", secrets_rotation_failure: "rotate_credentials",
+  resource_exhaustion: "scale_out", traffic_spike: "monitor_only", unknown: "restart_service",
+};
+
+const ROOT_CAUSE_TEMPLATES = {
+  bad_deploy: "A recent deploy to {service} is temporally correlated with this alert and is the most likely root cause.",
+  downstream_dependency_outage: "{service} is healthy internally but blocked on a degraded upstream dependency.",
+  memory_leak: "{service} shows a memory-leak pattern (steady growth ending in OOMKill).",
+  db_connection_pool_exhaustion: "{service}'s database connection pool is exhausted, likely due to a long-running query holding connections.",
+  disk_full: "{service}'s disk is full, most likely because log/data rotation has stopped working.",
+  cert_expiry: "{service} is rejecting TLS connections because a certificate has expired.",
+  config_error: "A recent configuration or feature-flag change to {service} is causing this regression.",
+  network_partition: "{service} is affected by a network partition between availability zones, not an application bug.",
+  cache_stampede: "A cache-stampede on {service} is overloading the backend after a hot key expired.",
+  dns_resolution_failure: "{service} is failing DNS resolution for a dependency hostname, likely a stale local resolver cache.",
+  queue_backlog: "{service}'s consumers have not scaled with incoming volume, causing backlog to grow unbounded.",
+  secrets_rotation_failure: "{service} is using a stale cached credential after a secret rotation invalidated the old one.",
+  resource_exhaustion: "{service} is CPU-saturated, likely due to co-scheduled workloads contending for the same nodes.",
+  traffic_spike: "This looks like legitimate traffic growth on {service}, already being handled by autoscaling — not a failure.",
+  unknown: "No heuristic rule matched this signal pattern; escalate to a human SRE for manual investigation.",
+};
+
+function logText(inc) { return inc.logs.join(" ").toLowerCase(); }
+
+const RULES = [
+  ["bad_deploy", inc => inc.recent_deploy && inc.recent_deploy.minutes_before_alert <= 15,
+    inc => [`Deploy ${inc.recent_deploy.version} shipped ${inc.recent_deploy.minutes_before_alert}m before the alert`]],
+  ["downstream_dependency_outage", inc => inc.dependency_status && /degraded/i.test(inc.dependency_status.status || ""),
+    inc => [`Dependency status: ${inc.dependency_status.name} reported degraded`]],
+  ["memory_leak", inc => /outofmemory|oomkilled|heap space/.test(logText(inc)),
+    () => ["Log signature: OutOfMemoryError / OOMKilled"]],
+  ["db_connection_pool_exhaustion", inc => /connection pool|hikaripool/.test(logText(inc)),
+    () => ["Log signature: connection pool exhausted"]],
+  ["disk_full", inc => /no space left on device|disk/.test(logText(inc)),
+    () => ["Log signature: No space left on device"]],
+  ["cert_expiry", inc => /certificate|x509/.test(logText(inc)),
+    () => ["Log signature: certificate expired / x509 error"]],
+  ["config_error", inc => /feature-flag|feature flag|flag '/.test(logText(inc)),
+    () => ["Log signature: feature flag change correlated with regression"]],
+  ["network_partition", inc => /no route to host|packet loss|cross-az|cross az/.test(logText(inc)) || /cross az/.test((inc.alert.alertname||"").toLowerCase()),
+    () => ["Log signature: no route to host / cross-AZ packet loss"]],
+  ["cache_stampede", inc => /cache/.test(logText(inc)) && /hit rate|stampede|thundering|concurrent regeneration/.test(logText(inc)),
+    () => ["Log signature: cache hit-rate collapse with concurrent regeneration requests"]],
+  ["dns_resolution_failure", inc => /dns|no such host|lookup/.test(logText(inc)),
+    () => ["Log signature: DNS lookup failure / no such host"]],
+  ["queue_backlog", inc => /lag|backlog/.test(logText(inc)),
+    () => ["Log signature: consumer lag / queue backlog growing"]],
+  ["secrets_rotation_failure", inc => /(401|unauthorized)/.test(logText(inc)) && /rotat/.test(logText(inc)),
+    () => ["Log signature: 401 Unauthorized immediately following a secret rotation event"]],
+  ["resource_exhaustion", inc => (inc.metrics.cpu_pct||0) > 90 || /throttl|noisy neighbor/.test(logText(inc)),
+    () => ["Metric signature: CPU saturation / cgroup throttling"]],
+  ["traffic_spike", inc => (inc.metrics.error_rate_pct||0) < 2 && /autoscaler/.test(logText(inc)),
+    () => ["Metrics show healthy error rate with autoscaler already responding to load"]],
+];
+
+function correlationNotes(inc) {
+  const notes = [];
+  const d = inc.recent_deploy;
+  if (d && d.minutes_before_alert <= 15) {
+    notes.push(`A deploy (version ${d.version}) shipped ${d.minutes_before_alert} minutes before this alert fired — strong temporal correlation with a bad release.`);
+  }
+  const dep = inc.dependency_status;
+  if (dep && /degraded/i.test(dep.status || "")) {
+    notes.push(`Upstream dependency '${dep.name}' is independently reported as degraded — this service may just be a victim, not the source.`);
+  }
+  const m = inc.metrics;
+  if ((m.cpu_pct||0) < 30 && (m.error_rate_pct||0) > 5) {
+    notes.push("Error rate is elevated while CPU is low — points away from resource exhaustion and toward a logic/config/dependency bug.");
+  }
+  if ((m.cpu_pct||0) > 80) {
+    notes.push("CPU is saturated — resource exhaustion or noisy-neighbor contention is plausible.");
+  }
+  if (notes.length === 0) notes.push("No strong automatic correlation found; relying on log/metric pattern matching.");
+  return notes;
+}
+
+function proposeRCA(inc) {
+  for (const [category, matcher, evidenceFn] of RULES) {
+    if (matcher(inc)) {
+      const evidence = evidenceFn(inc).concat(correlationNotes(inc).slice(0, 2));
+      return {
+        category,
+        root_cause: (ROOT_CAUSE_TEMPLATES[category] || "Pattern matched known failure signature.").replace("{service}", inc.service),
+        confidence: 0.72,
+        evidence,
+        severity_assessment: inc.alert.severity,
+        reasoning_source: "heuristic",
+      };
+    }
+  }
+  return {
+    category: "unknown", root_cause: ROOT_CAUSE_TEMPLATES.unknown, confidence: 0.2,
+    evidence: ["No matching log/metric signature in the heuristic rule set"],
+    severity_assessment: inc.alert.severity, reasoning_source: "heuristic",
+  };
+}
+
+function proposeRemediation(inc, rca) {
+  const actionId = CATEGORY_TO_ACTION[rca.category] || "restart_service";
+  const rb = RUNBOOK_CATALOG[actionId];
+  const requiresApproval = !(rb.risk === "none" || rb.risk === "low");
+  return {
+    action_id: actionId, description: rb.description, risk: rb.risk,
+    requires_human_approval: requiresApproval,
+    simulated_command: rb.cmd ? rb.cmd.replace("{service}", inc.service) : "",
+  };
+}
+
+function executeRemediation(remediation) {
+  // Mirrors ARGUS_AUTO_APPROVE_LOW_RISK=1 default from the Python project.
+  const canAuto = (remediation.risk === "none" || remediation.risk === "low");
+  if (!canAuto) {
+    return { status: "escalated_for_human_approval", message: `Action '${remediation.action_id}' (risk=${remediation.risk}) requires human approval before execution.` };
+  }
+  if (remediation.action_id === "monitor_only") {
+    return { status: "no_action_taken", message: "Confirmed non-issue; monitoring only." };
+  }
+  return { status: "executed", message: `[DRY RUN] Would execute: ${remediation.simulated_command}` };
+}
+
+function estimateAiMttr(correctRca, execution, baseline) {
+  if (!correctRca) return Math.round(baseline * 1.10 * 10) / 10;
+  if (execution.status === "executed") return 3.0;
+  if (execution.status === "no_action_taken") return 2.0;
+  if (execution.status === "escalated_for_human_approval") return Math.round(Math.max(5.0, baseline * 0.35) * 10) / 10;
+  return Math.round(baseline * 1.10 * 10) / 10;
+}
+
+function slackMessage(inc, rca, remediation, execution) {
+  const evidence = rca.evidence.map(e => `  • ${e}`).join("\n");
+  return `*[Argus AI SRE] ${inc.id} — ${inc.alert.alertname}* (${inc.service})\n` +
+    `Severity: ${inc.alert.severity}\n\n` +
+    `*Root cause hypothesis* (confidence ${(rca.confidence*100).toFixed(0)}%, via ${rca.reasoning_source}):\n` +
+    `  ${rca.root_cause}\n` +
+    `Evidence:\n${evidence}\n\n` +
+    `*Proposed action*: ${remediation.description} (risk: ${remediation.risk})\n` +
+    `*Execution result*: ${execution.status} — ${execution.message}`;
+}
+
+// ---------------- UI wiring ----------------
+
+const incidentList = document.getElementById("incidentList");
+INCIDENTS.forEach(inc => {
+  const item = document.createElement("div");
+  item.className = "incident-item";
+  item.dataset.id = inc.id;
+  item.innerHTML = `<div class="id">${inc.id} <span class="sev ${inc.alert.severity}">${inc.alert.severity}</span></div>
+                     <div class="name">${inc.alert.alertname}</div>
+                     <div class="svc">${inc.service}</div>`;
+  item.addEventListener("click", () => selectIncident(inc.id));
+  incidentList.appendChild(item);
+});
+
+function selectIncident(id) {
+  document.querySelectorAll(".incident-item").forEach(el => el.classList.toggle("selected", el.dataset.id === id));
+  const inc = INCIDENTS.find(i => i.id === id);
+  const rca = proposeRCA(inc);
+  const remediation = proposeRemediation(inc, rca);
+  const execution = executeRemediation(remediation);
+  const notes = correlationNotes(inc);
+  const msg = slackMessage(inc, rca, remediation, execution);
+
+  const host = document.getElementById("traceHost");
+  host.innerHTML = `
+    <h2>${inc.id} · ${inc.service} · ${inc.alert.alertname}</h2>
+
+    <div class="step">
+      <h3><span class="num">1</span>Correlated Incident Context</h3>
+      <div class="kv">
+        <div class="k">Summary</div><div>${inc.alert.summary}</div>
+        <div class="k">Metrics</div><div>error_rate=${inc.metrics.error_rate_pct}% · p99=${inc.metrics.latency_p99_ms}ms · cpu=${inc.metrics.cpu_pct}%</div>
+        <div class="k">Recent deploy</div><div>${inc.recent_deploy ? `${inc.recent_deploy.version} (${inc.recent_deploy.minutes_before_alert}m before alert)` : "none"}</div>
+        <div class="k">Dependency</div><div>${inc.dependency_status ? `${inc.dependency_status.name}: ${inc.dependency_status.status}` : "none"}</div>
+      </div>
+      <pre class="logs">${inc.logs.join("\n")}</pre>
+      <ul class="evidence">${notes.map(n => `<li>${n}</li>`).join("")}</ul>
+    </div>
+
+    <div class="step">
+      <h3><span class="num">2</span>RCA Hypothesis</h3>
+      <div class="kv">
+        <div class="k">Category</div><div><code>${rca.category}</code></div>
+        <div class="k">Confidence</div><div>${(rca.confidence*100).toFixed(0)}% <span class="confidence-bar"><span class="confidence-fill" style="width:${rca.confidence*100}%"></span></span></div>
+      </div>
+      <p style="font-size:13px;margin:4px 0 8px">${rca.root_cause}</p>
+      <ul class="evidence">${rca.evidence.map(e => `<li>${e}</li>`).join("")}</ul>
+    </div>
+
+    <div class="step">
+      <h3><span class="num">3</span>Proposed Remediation</h3>
+      <div class="kv">
+        <div class="k">Action</div><div><code>${remediation.action_id}</code> — ${remediation.description}</div>
+        <div class="k">Risk tier</div><div><span class="pill ${remediation.risk}">${remediation.risk}</span></div>
+        <div class="k">Simulated cmd</div><div><code>${remediation.simulated_command || "—"}</code></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <h3><span class="num">4</span>Execution (Risk-Gated)</h3>
+      <div class="kv">
+        <div class="k">Status</div><div><span class="pill ${execution.status}">${execution.status.replaceAll("_"," ")}</span></div>
+        <div class="k">Detail</div><div>${execution.message}</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <h3><span class="num">5</span>Notification</h3>
+      <div class="slack">${msg}</div>
+    </div>
+  `;
+}
+
+// Tabs
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById("tab-triage").classList.toggle("hidden", tab.dataset.tab !== "triage");
+    document.getElementById("tab-backtest").classList.toggle("hidden", tab.dataset.tab !== "backtest");
+  });
+});
+
+document.getElementById("runBacktest").addEventListener("click", () => {
+  const rows = INCIDENTS.map(inc => {
+    const truth = inc.ground_truth;
+    const rca = proposeRCA(inc);
+    const remediation = proposeRemediation(inc, rca);
+    const execution = executeRemediation(remediation);
+    const correctRca = rca.category === truth.category;
+    const correctAction = remediation.action_id === truth.correct_action;
+    const baseline = truth.baseline_mttr_minutes;
+    const aiMttr = estimateAiMttr(correctRca, execution, baseline);
+    return { inc, rca, remediation, execution, truth, correctRca, correctAction, baseline, aiMttr };
+  });
+
+  const n = rows.length;
+  const rcaAcc = (100 * rows.filter(r => r.correctRca).length / n).toFixed(1);
+  const actionAcc = (100 * rows.filter(r => r.correctAction).length / n).toFixed(1);
+  const autoPct = (100 * rows.filter(r => r.execution.status === "executed").length / n).toFixed(1);
+  const meanBaseline = rows.reduce((s, r) => s + r.baseline, 0) / n;
+  const meanAi = rows.reduce((s, r) => s + r.aiMttr, 0) / n;
+  const reduction = (100 * (1 - meanAi / meanBaseline)).toFixed(1);
+
+  const tableRows = rows.map(r => `
+    <tr>
+      <td>${r.inc.id}</td>
+      <td>${r.inc.service}</td>
+      <td class="${r.correctRca ? "ok" : "bad"}">${r.rca.category}${r.correctRca ? " ✓" : " ✗ (" + r.truth.category + ")"}</td>
+      <td>${r.rca.confidence.toFixed(2)}</td>
+      <td class="${r.correctAction ? "ok" : "bad"}">${r.remediation.action_id}${r.correctAction ? " ✓" : " ✗ (" + r.truth.correct_action + ")"}</td>
+      <td>${r.execution.status.replaceAll("_"," ")}</td>
+      <td>${r.baseline}</td>
+      <td>${r.aiMttr}</td>
+    </tr>`).join("");
+
+  document.getElementById("backtestOutput").innerHTML = `
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${rcaAcc}%</div><div class="label">RCA accuracy</div></div>
+      <div class="stat"><div class="num">${actionAcc}%</div><div class="label">Action match</div></div>
+      <div class="stat"><div class="num">${autoPct}%</div><div class="label">Auto-remediated</div></div>
+      <div class="stat"><div class="num">${meanBaseline.toFixed(1)}m</div><div class="label">Mean baseline MTTR</div></div>
+      <div class="stat"><div class="num">${meanAi.toFixed(1)}m</div><div class="label">Mean AI-assisted MTTR</div></div>
+      <div class="stat"><div class="num">${reduction}%</div><div class="label">Simulated MTTR reduction</div></div>
+    </div>
+    <table class="backtest">
+      <thead><tr><th>Incident</th><th>Service</th><th>Predicted Category</th><th>Conf.</th><th>Action</th><th>Exec Status</th><th>Baseline MTTR</th><th>AI MTTR</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+  `;
+});
+
+// auto-select first incident on load
+selectIncident(INCIDENTS[0].id);
+</script>
+</body>
+</html>

@@ -1,0 +1,437 @@
+[
+  {
+    "id": "INC-001",
+    "service": "checkout-api",
+    "alert": {
+      "alertname": "HighErrorRate",
+      "severity": "critical",
+      "summary": "5xx error rate on checkout-api exceeded 5% for 5m",
+      "started_at": "2026-07-01T09:14:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 8.7,
+      "latency_p99_ms": 640,
+      "cpu_pct": 41,
+      "pattern_description": "Error rate stepped sharply from 0.2% to 8.7% at a single point in time; latency mildly elevated; CPU/memory nominal."
+    },
+    "logs": [
+      "ERROR checkout-api: NullPointerException in PaymentValidator.validate() at line 214",
+      "ERROR checkout-api: Uncaught exception while processing order 88213",
+      "INFO checkout-api: request_id=9f2c... status=500 duration_ms=210"
+    ],
+    "recent_deploy": {"version": "v2.14.3", "minutes_before_alert": 6},
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "bad_deploy",
+      "root_cause": "Deploy v2.14.3 (6 min before the alert) introduced a NullPointerException in PaymentValidator, causing checkout requests to fail with 500s.",
+      "correct_action": "rollback_deploy",
+      "baseline_mttr_minutes": 35
+    }
+  },
+  {
+    "id": "INC-002",
+    "service": "recommendation-service",
+    "alert": {
+      "alertname": "PodCrashLoopBackOff",
+      "severity": "critical",
+      "summary": "recommendation-service pods restarting every ~4 minutes",
+      "started_at": "2026-07-02T14:02:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 3.1,
+      "latency_p99_ms": 300,
+      "cpu_pct": 55,
+      "pattern_description": "Memory usage climbs linearly from 200MB to the 1.5GB container limit over ~25 minutes, then the pod is OOMKilled and restarts; pattern repeats."
+    },
+    "logs": [
+      "ERROR recommendation-service: OutOfMemoryError: Java heap space",
+      "WARN recommendation-service: GC overhead limit exceeded",
+      "INFO kubelet: Killing container recommendation-service (OOMKilled)"
+    ],
+    "recent_deploy": {"version": "v5.2.0", "minutes_before_alert": 210},
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "memory_leak",
+      "root_cause": "A steady, linear memory growth pattern ending in OOMKill points to a memory leak introduced in v5.2.0 (likely an unbounded in-memory cache added to the recommendation ranking module).",
+      "correct_action": "restart_service",
+      "baseline_mttr_minutes": 50
+    }
+  },
+  {
+    "id": "INC-003",
+    "service": "orders-db-proxy",
+    "alert": {
+      "alertname": "DBConnectionPoolExhausted",
+      "severity": "critical",
+      "summary": "orders-db-proxy connection pool at 100% utilization",
+      "started_at": "2026-07-02T22:40:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 12.4,
+      "latency_p99_ms": 4200,
+      "cpu_pct": 30,
+      "pattern_description": "Active DB connections pinned at max pool size (50/50); queued query count rising; CPU on the DB proxy itself is low."
+    },
+    "logs": [
+      "ERROR orders-db-proxy: connection pool exhausted, timeout waiting for connection",
+      "ERROR orders-db-proxy: HikariPool-1 - Connection is not available, request timed out after 30000ms",
+      "WARN orders-db-proxy: slow query detected (duration=28s) on orders_history table"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "db_connection_pool_exhaustion",
+      "root_cause": "A batch reporting job is running a 28s+ unindexed query against orders_history, holding connections open and starving the pool for normal order traffic.",
+      "correct_action": "increase_connection_pool",
+      "baseline_mttr_minutes": 40
+    }
+  },
+  {
+    "id": "INC-004",
+    "service": "payments-gateway",
+    "alert": {
+      "alertname": "UpstreamDependencyErrors",
+      "severity": "critical",
+      "summary": "payments-gateway seeing 100% failure calling external processor 'GlobalPay'",
+      "started_at": "2026-07-03T03:10:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 41.0,
+      "latency_p99_ms": 9000,
+      "cpu_pct": 18,
+      "pattern_description": "Outbound calls to GlobalPay time out at the 9s client timeout; internal service health (CPU/mem) is completely normal."
+    },
+    "logs": [
+      "ERROR payments-gateway: GlobalPayClient timeout after 9000ms calling https://api.globalpay.example/v1/charge",
+      "ERROR payments-gateway: circuit breaker OPEN for globalpay-client",
+      "INFO payments-gateway: internal health checks: OK"
+    ],
+    "recent_deploy": null,
+    "dependency_status": {"name": "GlobalPay (external payment processor)", "status": "degraded / status page reports incident"},
+    "ground_truth": {
+      "category": "downstream_dependency_outage",
+      "root_cause": "Third-party payment processor GlobalPay is experiencing an outage on their end; payments-gateway itself is healthy but blocked on the dependency.",
+      "correct_action": "activate_fallback_provider",
+      "baseline_mttr_minutes": 60
+    }
+  },
+  {
+    "id": "INC-005",
+    "service": "log-ingest-worker",
+    "alert": {
+      "alertname": "DiskSpaceCritical",
+      "severity": "critical",
+      "summary": "log-ingest-worker root volume at 97% capacity",
+      "started_at": "2026-07-03T11:05:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 5.5,
+      "latency_p99_ms": 800,
+      "cpu_pct": 22,
+      "pattern_description": "Disk usage climbing ~2%/hour over the last two days with no corresponding traffic growth."
+    },
+    "logs": [
+      "ERROR log-ingest-worker: No space left on device (os error 28)",
+      "ERROR log-ingest-worker: failed to write buffered batch to /var/spool/ingest",
+      "WARN log-ingest-worker: /var/log/ingest has grown to 41GB, rotation appears stalled"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "disk_full",
+      "root_cause": "Log rotation stopped working after a config change disabled the logrotate cron job, so old logs are never cleaned up and the disk is filling.",
+      "correct_action": "clear_disk_space",
+      "baseline_mttr_minutes": 30
+    }
+  },
+  {
+    "id": "INC-006",
+    "service": "api-gateway",
+    "alert": {
+      "alertname": "TLSHandshakeFailures",
+      "severity": "critical",
+      "summary": "Spike in TLS handshake failures on api-gateway public endpoint",
+      "started_at": "2026-07-04T00:02:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 63.0,
+      "latency_p99_ms": 50,
+      "cpu_pct": 12,
+      "pattern_description": "Failures begin abruptly at midnight UTC and affect 100% of external clients; internal service-to-service traffic unaffected."
+    },
+    "logs": [
+      "ERROR api-gateway: TLS handshake error: certificate has expired (x509: certificate has expired or is not yet valid)",
+      "ERROR api-gateway: client rejected connection: certificate expired",
+      "INFO api-gateway: cert 'api.example.com' expiry was 2026-07-04T00:00:00Z"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "cert_expiry",
+      "root_cause": "The public TLS certificate for api.example.com expired at midnight; auto-renewal via the ACME client failed silently three days ago.",
+      "correct_action": "rotate_certificate",
+      "baseline_mttr_minutes": 45
+    }
+  },
+  {
+    "id": "INC-007",
+    "service": "search-api",
+    "alert": {
+      "alertname": "ElevatedLatency",
+      "severity": "warning",
+      "summary": "search-api p99 latency up 6x after feature flag rollout",
+      "started_at": "2026-07-04T16:20:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 0.4,
+      "latency_p99_ms": 3100,
+      "cpu_pct": 38,
+      "pattern_description": "Latency jumps immediately after a feature-flag change event; error rate barely moves, so this looks like a performance regression rather than a crash."
+    },
+    "logs": [
+      "INFO feature-flags: flag 'search_use_new_ranker' flipped to 100% rollout",
+      "WARN search-api: ranker model 'v3-experimental' request took 2950ms",
+      "INFO search-api: falling back to cached results after slow ranker response"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "config_error",
+      "root_cause": "The 'search_use_new_ranker' feature flag was rolled out to 100% of traffic; the experimental ranker model is far slower than the legacy one and was not load-tested at full traffic.",
+      "correct_action": "revert_config_flag",
+      "baseline_mttr_minutes": 25
+    }
+  },
+  {
+    "id": "INC-008",
+    "service": "auth-service",
+    "alert": {
+      "alertname": "RequestVolumeSpike",
+      "severity": "warning",
+      "summary": "auth-service request volume 4x above baseline",
+      "started_at": "2026-07-05T09:00:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 0.6,
+      "latency_p99_ms": 210,
+      "cpu_pct": 71,
+      "pattern_description": "Traffic volume climbing steadily over 30 minutes correlated with a marketing campaign launch; error rate and latency remain within normal bounds, autoscaler is adding pods."
+    },
+    "logs": [
+      "INFO auth-service: autoscaler added 4 new replicas (target CPU 70%)",
+      "INFO auth-service: request rate 12,400 req/min (baseline ~3,000 req/min)",
+      "INFO auth-service: no elevated error rate observed"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "traffic_spike",
+      "root_cause": "Legitimate traffic surge from a marketing campaign, not a failure. The autoscaler is already handling load correctly; error rate and latency remain healthy.",
+      "correct_action": "monitor_only",
+      "baseline_mttr_minutes": 20
+    }
+  },
+  {
+    "id": "INC-009",
+    "service": "inventory-service",
+    "alert": {
+      "alertname": "CrossAZConnectivityLoss",
+      "severity": "critical",
+      "summary": "inventory-service in us-east-1b cannot reach primary DB in us-east-1a",
+      "started_at": "2026-07-05T13:44:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 55.0,
+      "latency_p99_ms": 30000,
+      "cpu_pct": 20,
+      "pattern_description": "100% of requests routed through the 1b availability zone fail; 1a and 1c are unaffected, pointing to an AZ-local network issue rather than an application bug."
+    },
+    "logs": [
+      "ERROR inventory-service: connect timeout to db-primary.us-east-1a.internal from az us-east-1b",
+      "ERROR inventory-service: no route to host 10.4.12.9",
+      "WARN network: elevated packet loss reported between us-east-1a and us-east-1b"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "network_partition",
+      "root_cause": "A network partition between availability zones us-east-1a and us-east-1b is blocking cross-AZ traffic; this is an infrastructure-level fault outside the application.",
+      "correct_action": "failover_to_secondary_az",
+      "baseline_mttr_minutes": 70
+    }
+  },
+  {
+    "id": "INC-010",
+    "service": "pricing-service",
+    "alert": {
+      "alertname": "HighErrorRate",
+      "severity": "critical",
+      "summary": "pricing-service 5xx rate above threshold",
+      "started_at": "2026-07-06T08:30:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 15.2,
+      "latency_p99_ms": 900,
+      "cpu_pct": 44,
+      "pattern_description": "Error rate jumps immediately following a deploy event; no gradual ramp, consistent with a bad release rather than resource exhaustion."
+    },
+    "logs": [
+      "ERROR pricing-service: KeyError: 'discount_tier' in PricingEngine.compute()",
+      "ERROR pricing-service: unhandled exception in /v1/price endpoint",
+      "INFO pricing-service: deploy v9.0.1 completed 4 minutes ago"
+    ],
+    "recent_deploy": {"version": "v9.0.1", "minutes_before_alert": 4},
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "bad_deploy",
+      "root_cause": "Deploy v9.0.1 removed a field ('discount_tier') that PricingEngine.compute() still depends on, causing KeyErrors on every pricing request.",
+      "correct_action": "rollback_deploy",
+      "baseline_mttr_minutes": 35
+    }
+  },
+  {
+    "id": "INC-011",
+    "service": "home-feed-service",
+    "alert": {
+      "alertname": "CacheHitRateCollapse",
+      "severity": "warning",
+      "summary": "home-feed-service cache hit rate dropped from 92% to 4%",
+      "started_at": "2026-07-06T18:12:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 2.0,
+      "latency_p99_ms": 2200,
+      "cpu_pct": 88,
+      "pattern_description": "Cache hit rate collapsed at the same moment a popular cache key expired, causing a thundering-herd of requests to hit the backend simultaneously; backend CPU spiking as a result."
+    },
+    "logs": [
+      "WARN home-feed-service: cache key 'feed:trending:global' expired, hit rate dropped to 4%",
+      "WARN home-feed-service: backend origin CPU at 88%, request queueing observed",
+      "INFO home-feed-service: 40,000 concurrent regeneration requests for the same key detected"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "cache_stampede",
+      "root_cause": "A high-traffic cache key ('feed:trending:global') expired without a lock/jitter strategy, causing a thundering-herd cache stampede that overloaded the backend.",
+      "correct_action": "warm_cache",
+      "baseline_mttr_minutes": 30
+    }
+  },
+  {
+    "id": "INC-012",
+    "service": "notification-service",
+    "alert": {
+      "alertname": "OutboundCallFailures",
+      "severity": "critical",
+      "summary": "notification-service cannot resolve email provider hostname",
+      "started_at": "2026-07-07T02:15:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 22.0,
+      "latency_p99_ms": 100,
+      "cpu_pct": 15,
+      "pattern_description": "Failures are near-instant (fail fast) rather than timeouts, consistent with a resolution failure rather than a slow/unavailable endpoint."
+    },
+    "logs": [
+      "ERROR notification-service: dial tcp: lookup smtp.emailprovider.example: no such host",
+      "ERROR notification-service: DNS resolution failed for smtp.emailprovider.example",
+      "WARN notification-service: local DNS cache last refreshed 6h ago"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "dns_resolution_failure",
+      "root_cause": "Stale/poisoned local DNS cache entries are causing lookups for the email provider hostname to fail; the provider itself is reachable.",
+      "correct_action": "flush_dns_cache",
+      "baseline_mttr_minutes": 40
+    }
+  },
+  {
+    "id": "INC-013",
+    "service": "order-processor",
+    "alert": {
+      "alertname": "QueueBacklogGrowing",
+      "severity": "warning",
+      "summary": "order-processor consumer lag on 'orders.created' topic growing unbounded",
+      "started_at": "2026-07-07T05:50:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 1.0,
+      "latency_p99_ms": 500,
+      "cpu_pct": 25,
+      "pattern_description": "Consumer lag rising linearly while consumer CPU stays low, meaning consumers are idle/stalled rather than overloaded."
+    },
+    "logs": [
+      "WARN order-processor: consumer group 'order-processor-group' lag = 184,320 messages and climbing",
+      "WARN order-processor: consumer thread pool utilization at 3%",
+      "INFO order-processor: no errors thrown, consumers appear idle"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "queue_backlog",
+      "root_cause": "Consumer count did not scale with a recent increase in order volume; too few consumer instances are running to keep up with the 'orders.created' topic.",
+      "correct_action": "scale_out_consumers",
+      "baseline_mttr_minutes": 35
+    }
+  },
+  {
+    "id": "INC-014",
+    "service": "billing-service",
+    "alert": {
+      "alertname": "AuthenticationFailures",
+      "severity": "critical",
+      "summary": "billing-service getting 401s from internal ledger API",
+      "started_at": "2026-07-07T07:05:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 100.0,
+      "latency_p99_ms": 120,
+      "cpu_pct": 10,
+      "pattern_description": "100% of calls to the ledger API fail with 401 starting exactly at a scheduled secret-rotation time; no other symptoms."
+    },
+    "logs": [
+      "ERROR billing-service: ledger-api responded 401 Unauthorized",
+      "ERROR billing-service: API key 'billing-svc-key-v3' rejected",
+      "INFO secrets-manager: scheduled rotation of 'billing-svc-key' completed 5 minutes ago"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "secrets_rotation_failure",
+      "root_cause": "A scheduled secret rotation updated 'billing-svc-key' in the secrets manager, but billing-service's cached credential was not refreshed, so it is still presenting the old, now-invalid key.",
+      "correct_action": "rotate_credentials",
+      "baseline_mttr_minutes": 55
+    }
+  },
+  {
+    "id": "INC-015",
+    "service": "recommendation-service",
+    "alert": {
+      "alertname": "HighCPUThrottling",
+      "severity": "warning",
+      "summary": "recommendation-service CPU throttling detected on 3 nodes",
+      "started_at": "2026-07-07T10:30:00Z"
+    },
+    "metrics": {
+      "error_rate_pct": 1.8,
+      "latency_p99_ms": 1500,
+      "cpu_pct": 97,
+      "pattern_description": "CPU pinned near 100% with visible cgroup throttling; another workload was co-scheduled on the same nodes moments before the alert (noisy neighbor)."
+    },
+    "logs": [
+      "WARN kubelet: container recommendation-service throttled, cpu.cfs_throttled_time increasing rapidly",
+      "INFO scheduler: batch-ml-training-job co-scheduled onto node-17, node-18, node-19",
+      "WARN recommendation-service: request latency p99 degraded to 1500ms"
+    ],
+    "recent_deploy": null,
+    "dependency_status": null,
+    "ground_truth": {
+      "category": "resource_exhaustion",
+      "root_cause": "A batch ML training job was scheduled onto the same nodes as recommendation-service, causing CPU contention ('noisy neighbor') and throttling.",
+      "correct_action": "scale_out",
+      "baseline_mttr_minutes": 35
+    }
+  }
+]
