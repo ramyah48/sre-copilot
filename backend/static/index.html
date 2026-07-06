@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Argus AI SRE — Dashboard</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #10161d; --panel-alt: #141b23; --border: #232c36;
+    --text: #d7dde3; --muted: #7f8b98; --accent: #5ee6c5; --accent-dim: #2e6e5f;
+    --amber: #e6b85e; --red: #e66b5e; --green: #6fd17a;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.5; }
+  header { padding: 24px 32px 18px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, #0e141b 0%, #0b0f14 100%); }
+  header h1 { margin: 0 0 6px; font-size: 21px; }
+  header h1 span.eye { color: var(--accent); }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  .live-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--green); font-family: var(--mono); margin-top: 10px; }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+  main { max-width: 1180px; margin: 0 auto; padding: 26px 32px 60px; }
+  .grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin: 0 0 12px; }
+  .incident-list { display: flex; flex-direction: column; gap: 6px; max-height: 640px; overflow-y: auto; }
+  .incident-item { padding: 10px 12px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; background: var(--panel-alt); }
+  .incident-item:hover { border-color: var(--accent-dim); }
+  .incident-item.selected { border-color: var(--accent); background: #10241f; }
+  .incident-item .id { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .incident-item .name { font-size: 13px; margin-top: 2px; }
+  .incident-item .svc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .sev { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 10px; margin-left: 6px; }
+  .sev.critical { background: #3a1414; color: var(--red); }
+  .sev.warning { background: #3a2f14; color: var(--amber); }
+  .status-chip { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 8px; margin-top: 4px; font-family: var(--mono); }
+  .status-chip.escalated_for_human_approval { background: #3a2f14; color: var(--amber); }
+  .status-chip.executed { background: #123024; color: var(--green); }
+  .status-chip.no_action_taken { background: #1a2230; color: #8fb3e6; }
+  .step { margin-bottom: 18px; }
+  .step h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--accent); margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+  .step h3 .num { width: 20px; height: 20px; border-radius: 50%; background: var(--accent-dim); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; font-size: 13px; margin-bottom: 8px; }
+  .kv .k { color: var(--muted); }
+  pre.logs { background: #05070a; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--mono); font-size: 12px; color: #9fb; overflow-x: auto; margin: 0; }
+  .evidence { font-size: 13px; margin: 6px 0 0; padding-left: 18px; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 6px; }
+  .pill.low, .pill.none { background: #123024; color: var(--green); }
+  .pill.medium { background: #3a2f14; color: var(--amber); }
+  .pill.high { background: #3a1414; color: var(--red); }
+  .approval-box { margin-top: 10px; padding: 14px; border: 1px dashed var(--amber); border-radius: 8px; background: #1a1610; }
+  .approval-box p { margin: 0 0 10px; font-size: 13px; color: var(--amber); }
+  .approval-box input { background: #05070a; border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 8px 10px; font-size: 13px; margin-right: 8px; width: 200px; }
+  button.approve { background: var(--amber); color: #1a1200; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 700; font-size: 13px; cursor: pointer; }
+  button.approve:hover { filter: brightness(1.08); }
+  button.approve:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 7px 14px; font-size: 12px; cursor: pointer; margin-top: 8px; }
+  button.secondary:hover { border-color: var(--accent-dim); color: var(--accent); }
+  .approved-note { margin-top: 10px; font-size: 12px; color: var(--green); font-family: var(--mono); }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .tab { padding: 9px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer; font-size: 13px; font-weight: 600; }
+  .tab.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+  .hidden { display: none; }
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 6px; }
+  @media (max-width: 700px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
+  .stat { background: var(--panel-alt); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .stat .num { font-size: 24px; font-weight: 700; color: var(--accent); font-family: var(--mono); }
+  .stat .label { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+  button.run { background: var(--accent); color: #062018; border: none; border-radius: 8px; padding: 10px 18px; font-weight: 700; font-size: 13px; cursor: pointer; }
+  .error-box { background: #3a1414; color: var(--red); padding: 12px; border-radius: 8px; font-size: 13px; font-family: var(--mono); }
+  code { font-family: var(--mono); background: #05070a; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="eye">◉</span> Argus AI SRE — Live Dashboard</h1>
+  <p>Talking to the real FastAPI backend on this machine — every click below hits an actual HTTP endpoint, not a canned demo.</p>
+  <div class="live-badge"><span class="live-dot"></span> connected to <code id="apiBase"></code></div>
+</header>
+
+<main>
+  <div class="tabs">
+    <div class="tab active" data-tab="triage">Incident Triage</div>
+    <div class="tab" data-tab="backtest">Backtest Report</div>
+  </div>
+
+  <div id="tab-triage">
+    <div class="grid">
+      <div class="panel">
+        <h2>Currently Firing</h2>
+        <div class="incident-list" id="incidentList">Loading…</div>
+      </div>
+      <div class="panel" id="traceHost">
+        <h2>Select an incident →</h2>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-backtest" class="hidden">
+    <div class="panel">
+      <h2>Backtest: replay all incidents against ground truth</h2>
+      <p style="font-size:13px;color:var(--muted);margin-top:0">Calls <code>GET /backtest</code> on the live backend — same numbers as <code>python demo.py</code>.</p>
+      <button class="run" id="runBacktest">▶ Run backtest</button>
+      <div id="backtestOutput"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const API = ""; // same-origin: this page is served by the same FastAPI app it talks to
+document.getElementById("apiBase").textContent = window.location.origin;
+
+let currentIncidentId = null;
+
+async function api(path, options) {
+  const resp = await fetch(API + path, options);
+  if (!resp.ok) {
+    const detail = await resp.text();
+    throw new Error(`${resp.status} ${resp.statusText}: ${detail}`);
+  }
+  return resp.json();
+}
+
+async function loadIncidentList() {
+  const list = document.getElementById("incidentList");
+  try {
+    const incidents = await api("/incidents");
+    list.innerHTML = "";
+    incidents.forEach(inc => {
+      const item = document.createElement("div");
+      item.className = "incident-item";
+      item.dataset.id = inc.incident_id;
+      item.innerHTML = `<div class="id">${inc.incident_id} <span class="sev ${inc.severity}">${inc.severity}</span></div>
+                         <div class="name">${inc.alertname}</div>
+                         <div class="svc">${inc.service}</div>
+                         <div class="status-chip" id="chip-${inc.incident_id}"></div>`;
+      item.addEventListener("click", () => selectIncident(inc.incident_id));
+      list.appendChild(item);
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="error-box">Could not reach the backend: ${err.message}</div>`;
+  }
+}
+
+function renderTrace(record) {
+  const host = document.getElementById("traceHost");
+  const { context, rca, remediation, execution, approved_by, approved_at } = record;
+
+  const chip = document.getElementById(`chip-${record.incident_id}`);
+  if (chip) {
+    chip.className = `status-chip ${execution.status}`;
+    chip.textContent = execution.status.replaceAll("_", " ");
+  }
+
+  let approvalHtml = "";
+  if (execution.status === "escalated_for_human_approval") {
+    approvalHtml = `
+      <div class="approval-box">
+        <p>⚠ This action is ${remediation.risk}-risk and will NOT run without a named human approving it.</p>
+        <input type="text" id="approverName" placeholder="Your name" />
+        <button class="approve" id="approveBtn">Approve &amp; Execute</button>
+      </div>`;
+  } else if (approved_by) {
+    approvalHtml = `<div class="approved-note">✓ Approved by ${approved_by} at ${approved_at}</div>`;
+  }
+
+  host.innerHTML = `
+    <h2>${record.incident_id} · ${context.service} · ${context.alert.alertname}</h2>
+
+    <div class="step">
+      <h3><span class="num">1</span>Correlated Incident Context</h3>
+      <div class="kv">
+        <div class="k">Summary</div><div>${context.alert.summary}</div>
+        <div class="k">Metrics</div><div>error_rate=${context.metrics.error_rate_pct}% · p99=${context.metrics.latency_p99_ms}ms · cpu=${context.metrics.cpu_pct}%</div>
+        <div class="k">Recent deploy</div><div>${context.recent_deploy ? `${context.recent_deploy.version} (${context.recent_deploy.minutes_before_alert}m before alert)` : "none"}</div>
+        <div class="k">Dependency</div><div>${context.dependency_status ? `${context.dependency_status.name}: ${context.dependency_status.status}` : "none"}</div>
+      </div>
+      <pre class="logs">${context.logs.join("\n")}</pre>
+    </div>
+
+    <div class="step">
+      <h3><span class="num">2</span>RCA Hypothesis</h3>
+      <div class="kv">
+        <div class="k">Category</div><div><code>${rca.category}</code></div>
+        <div class="k">Confidence</div><div>${(rca.confidence * 100).toFixed(0)}% (${rca.reasoning_source})</div>
+      </div>
+      <p style="font-size:13px;margin:4px 0 8px">${rca.root_cause}</p>
+      <ul class="evidence">${rca.evidence.map(e => `<li>${e}</li>`).join("")}</ul>
+    </div>
+
+    <div class="step">
+      <h3><span class="num">3</span>Proposed Remediation</h3>
+      <div class="kv">
+        <div class="k">Action</div><div><code>${remediation.action_id}</code> — ${remediation.description}</div>
+        <div class="k">Risk tier</div><div><span class="pill ${remediation.risk}">${remediation.risk}</span></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <h3><span class="num">4</span>Execution</h3>
+      <div class="kv">
+        <div class="k">Status</div><div><span class="pill ${remediation.risk === 'none' || remediation.risk === 'low' ? 'low' : 'medium'}">${execution.status.replaceAll("_", " ")}</span></div>
+        <div class="k">Detail</div><div>${execution.message}</div>
+      </div>
+      ${approvalHtml}
+      <button class="secondary" id="resetBtn">↺ Reset this incident</button>
+    </div>
+  `;
+
+  const approveBtn = document.getElementById("approveBtn");
+  if (approveBtn) {
+    approveBtn.addEventListener("click", async () => {
+      const name = document.getElementById("approverName").value.trim() || "unknown";
+      approveBtn.disabled = true;
+      approveBtn.textContent = "Approving…";
+      try {
+        const updated = await api(`/incidents/${record.incident_id}/approve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ approved_by: name }),
+        });
+        renderTrace(updated);
+      } catch (err) {
+        alert("Approval failed: " + err.message);
+        approveBtn.disabled = false;
+        approveBtn.textContent = "Approve & Execute";
+      }
+    });
+  }
+
+  document.getElementById("resetBtn").addEventListener("click", async () => {
+    await api(`/incidents/${record.incident_id}/reset`, { method: "POST" });
+    selectIncident(record.incident_id);
+  });
+}
+
+async function selectIncident(id) {
+  currentIncidentId = id;
+  document.querySelectorAll(".incident-item").forEach(el => el.classList.toggle("selected", el.dataset.id === id));
+  const host = document.getElementById("traceHost");
+  host.innerHTML = "<h2>Loading trace…</h2>";
+  try {
+    const record = await api(`/incidents/${id}/trace`);
+    renderTrace(record);
+  } catch (err) {
+    host.innerHTML = `<div class="error-box">${err.message}</div>`;
+  }
+}
+
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById("tab-triage").classList.toggle("hidden", tab.dataset.tab !== "triage");
+    document.getElementById("tab-backtest").classList.toggle("hidden", tab.dataset.tab !== "backtest");
+  });
+});
+
+document.getElementById("runBacktest").addEventListener("click", async () => {
+  const out = document.getElementById("backtestOutput");
+  out.innerHTML = "Running…";
+  try {
+    const summary = await api("/backtest");
+    out.innerHTML = `
+      <div class="stat-grid">
+        <div class="stat"><div class="num">${summary.rca_accuracy_pct}%</div><div class="label">RCA accuracy</div></div>
+        <div class="stat"><div class="num">${summary.action_match_pct}%</div><div class="label">Action match</div></div>
+        <div class="stat"><div class="num">${summary.auto_remediated_pct}%</div><div class="label">Auto-remediated</div></div>
+        <div class="stat"><div class="num">${summary.mean_baseline_mttr_min}m</div><div class="label">Mean baseline MTTR</div></div>
+        <div class="stat"><div class="num">${summary.mean_ai_assisted_mttr_min}m</div><div class="label">Mean AI-assisted MTTR</div></div>
+        <div class="stat"><div class="num">${summary.simulated_mttr_reduction_pct}%</div><div class="label">Simulated MTTR reduction</div></div>
+      </div>`;
+  } catch (err) {
+    out.innerHTML = `<div class="error-box">${err.message}</div>`;
+  }
+});
+
+loadIncidentList();
+</script>
+</body>
+</html>

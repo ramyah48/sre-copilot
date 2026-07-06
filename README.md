@@ -65,7 +65,9 @@ pip install -r backend/requirements.txt
 uvicorn backend.main:app --reload --port 8000
 ```
 
-Then open **http://127.0.0.1:8000/docs** — FastAPI auto-generates a full interactive API explorer, so you can try every endpoint from the browser with zero extra work.
+Then open:
+- **http://127.0.0.1:8000/ui/** — the live dashboard: incident list, full triage trace, and a real "Approve & Execute" button for anything medium/high risk, wired to the actual backend (not a canned demo).
+- **http://127.0.0.1:8000/docs** — FastAPI auto-generates a full interactive API explorer, so you can try every endpoint directly with zero extra work.
 
 Endpoints:
 - `GET /incidents` — list all incidents
