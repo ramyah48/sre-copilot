@@ -1,11 +1,11 @@
-# Argus — AI SRE Incident Triage & RCA Copilot (MCP Plugin)
+# Argus — AI SRE Incident Triage & RCA Copilot (MCP Plugin + Web Dashboard)
 
 **Live demo (no install, works in any browser):** https://ramyah48.github.io/sre-copilot/
 *(goes live once GitHub Pages is enabled on this repo — see "Publishing the live demo" below)*
 
-Argus is an AI SRE copilot, shipped as an **MCP (Model Context Protocol) plugin**, that watches for firing alerts, automatically correlates logs/metrics/deploys/dependency status into a single incident context, proposes a root-cause hypothesis with evidence, recommends a concrete runbook fix, and — only for pre-approved low-risk actions — executes it. Everything else is escalated to a human with the diagnosis already done.
+Argus is an AI SRE copilot that watches for firing alerts, automatically correlates logs/metrics/deploys/dependency status into a single incident context, proposes a root-cause hypothesis with evidence, recommends a concrete runbook fix, and — only for pre-approved low-risk actions — executes it. Everything else is escalated to a human with the diagnosis already done.
 
-Because it's an MCP plugin rather than a standalone dashboard, any MCP-compatible agent (Claude Desktop, Claude Code, Cowork, or a custom Claude Agent SDK app) can attach to it and answer questions like *"what's on fire right now, and what would you do about INC-004?"* in plain English.
+It ships with two interfaces over the exact same triage logic, so they can never disagree: an **MCP (Model Context Protocol) plugin**, so any MCP-compatible agent (Claude Desktop, Claude Code, Cowork, or a custom Claude Agent SDK app) can attach to it and answer questions like *"what's on fire right now, and what would you do about INC-004?"* in plain English; and a **FastAPI backend + web dashboard** (see "Backend API" below) for clicking through incidents and approving remediations directly in a browser.
 
 This mirrors the "AI SRE" category that PagerDuty, Datadog (Bits AI), and incident.io have all shipped agents into over the last year — vendors report **40–60% MTTR reductions** from this pattern (autonomous diagnosis + human-approved remediation). This project is a from-scratch implementation of the same idea, sized for a portfolio.
 
@@ -13,7 +13,7 @@ This mirrors the "AI SRE" category that PagerDuty, Datadog (Bits AI), and incide
 
 | Design choice | Reasoning |
 |---|---|
-| MCP plugin, not a web app | Plugs directly into the agent ecosystem people already use (Claude Desktop/Code/Cowork) instead of yet another dashboard. |
+| MCP plugin *and* a thin FastAPI web layer | The MCP server plugs directly into the agent ecosystem people already use (Claude Desktop/Code/Cowork); the FastAPI backend + dashboard is a same-logic REST/UI layer for anyone who'd rather click through a browser than talk to an agent. Both call the identical `argus` package underneath. |
 | Hybrid heuristic + LLM RCA engine | The LLM path (Claude) gives open-ended reasoning over novel failures; the heuristic path is a deterministic fallback if the LLM call fails, times out, or hallucinates — so the copilot degrades gracefully instead of going dark during an incident. |
 | Risk-tiered remediation gate | **The action's risk tier decides auto-execution, not the model's confidence.** A confident LLM can still be wrong; a human-set risk policy can't be talked out of its job. Medium/high-risk actions (failover, credential rotation, connection-pool surgery) always require explicit human approval — no exceptions, enforced in code, tested. |
 | Synthetic incident dataset + backtest harness | Real Prometheus/PagerDuty/Slack access isn't available in a portfolio context, so Argus ships with 15 hand-labeled synthetic incidents spanning bad deploys, memory leaks, DB pool exhaustion, dependency outages, disk/cert/DNS/queue/cache/secrets/network failures, and one deliberate false alarm (legitimate traffic growth) — so accuracy and MTTR-impact can be *measured*, not just asserted. |
@@ -108,7 +108,9 @@ Then follow "Publishing the live demo" above to turn on Pages.
 
 ```
 sre-copilot/
-├── backend/              # FastAPI REST API over the argus package (see "Backend API" above)
+├── backend/
+│   ├── main.py           # FastAPI REST API over the argus package (see "Backend API" above)
+│   └── static/index.html # the live dashboard served at /ui/
 ├── argus/
 │   ├── data_store.py     # mocked observability backend (swap for real APIs)
 │   ├── correlation.py    # builds the incident context bundle
@@ -121,6 +123,7 @@ sre-copilot/
 ├── docs/index.html       # public, no-install browser demo (GitHub Pages serves this)
 ├── eval/backtest.py      # replays all incidents, scores accuracy + simulated MTTR
 ├── tests/test_argus.py   # pytest suite (34 tests): rules, risk gate, pipeline
+├── tests/test_backend.py # pytest suite (7 tests): FastAPI endpoints, approve/reset flow
 ├── demo.py               # `python demo.py` or `python demo.py --trace INC-004`
 └── RESUME_AND_INTERVIEW_GUIDE.md
 ```
@@ -164,4 +167,4 @@ simulated_mttr_reduction_pct: 79.6
 - Swap `data_store.py` for real Prometheus + Alertmanager + a log backend (Loki) — the interface is already shaped for this.
 - Held-out eval set (incidents never seen while writing the heuristic rules) to measure true LLM-mode generalization instead of heuristic-mode memorization.
 - Vector-search over a runbook/postmortem knowledge base so RCA can cite *"this matches postmortem #47 from March"* instead of only pattern-matching logs.
-- A lightweight web UI for approving/rejecting medium/high-risk remediations instead of a `--approved` CLI flag.
+- Persist approval decisions in a real database instead of the current in-memory store, so an approval survives a server restart.
